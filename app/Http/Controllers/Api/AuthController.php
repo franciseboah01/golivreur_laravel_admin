@@ -26,13 +26,21 @@ class AuthController extends Controller
             return response()->json(['erreur' => $validateur->errors()], 422);
         }
 
-        $utilisateur = User::create($request->all());
+        // CORRECTION : On extrait les données et on hache le mot de passe avant d'insérer en BDD
+        $donnees = $request->all();
+        $donnees['password'] = Hash::make($request->password);
+
+        // Nettoyage préventif du numéro (retrait des espaces)
+        $donnees['telephone'] = str_replace(' ', '', $request->telephone);
+
+        $utilisateur = User::create($donnees);
 
         $token = $utilisateur->createToken('auth_token')->plainTextToken;
 
+        // CORRECTION : Clé 'user' en anglais pour correspondre au AuthService de Flutter
         return response()->json([
             'message' => 'Inscription réussie',
-            'utilisateur' => $utilisateur,
+            'user' => $utilisateur,
             'token' => $token,
         ], 201);
     }
@@ -44,17 +52,22 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $utilisateur = User::where('telephone', $request->telephone)->first();
+        // Nettoyage du numéro saisi à la connexion
+        $telephone = str_replace(' ', '', $request->telephone);
 
+        $utilisateur = User::where('telephone', $telephone)->first();
+
+        // Fonctionne maintenant parfaitement car le mot de passe en BDD est haché
         if (!$utilisateur || !Hash::check($request->password, $utilisateur->password)) {
             return response()->json(['message' => 'Téléphone ou mot de passe incorrect'], 401);
         }
 
         $token = $utilisateur->createToken('auth_token')->plainTextToken;
 
+        // CORRECTION : Clé 'user' uniforme avec l'inscription
         return response()->json([
             'message' => 'Connexion réussie',
-            'utilisateur' => $utilisateur,
+            'user' => $utilisateur, 
             'token' => $token,
         ]);
     }
@@ -83,3 +96,4 @@ class AuthController extends Controller
         return response()->json(['message' => 'Déconnexion réussie']);
     }
 }
+ 
