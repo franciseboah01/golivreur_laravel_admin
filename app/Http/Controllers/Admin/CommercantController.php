@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Commercant;
+use Illuminate\Http\Request;
 
 class CommercantController extends Controller
 {

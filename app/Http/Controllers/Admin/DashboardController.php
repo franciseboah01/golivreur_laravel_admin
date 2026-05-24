@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Commercant;
 use App\Models\Livreur;
 use App\Models\Commande;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
