@@ -10,90 +10,84 @@ use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
-    public function inscrire(Request $request)
+    public function register(Request $request)
     {
-        $validateur = Validator::make($request->all(), [
+        $validator = Validator::make($request->all(), [
             'nom' => 'required|string|max:50',
             'prenom' => 'required|string|max:50',
             'telephone' => 'required|string|max:15|unique:users',
             'email' => 'nullable|email|unique:users',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:6|confirmed',
             'role' => 'required|in:client,livreur,commercant',
             'zone_id' => 'nullable|exists:zones,id',
+            'vehicule_type' => 'nullable|in:velo,voiture,tricycle|required_if:role,livreur',
         ]);
 
-        if ($validateur->fails()) {
-            return response()->json(['erreur' => $validateur->errors()], 422);
+        if ($validator->fails()) {
+            return response()->json(['erreur' => $validator->errors()], 422);
         }
 
-        // CORRECTION : On extrait les données et on hache le mot de passe avant d'insérer en BDD
-        $donnees = $request->all();
-        $donnees['password'] = Hash::make($request->password);
+        $data = $request->validated();
+        $data['password'] = Hash::make($data['password']);
+        $data['telephone'] = preg_replace('/\s+/', '', $data['telephone']);
 
-        // Nettoyage préventif du numéro (retrait des espaces)
-        $donnees['telephone'] = str_replace(' ', '', $request->telephone);
+        $user = User::create($data);
+        $token = $user->createToken('auth_token')->plainTextToken;
 
-        $utilisateur = User::create($donnees);
-
-        $token = $utilisateur->createToken('auth_token')->plainTextToken;
-
-        // CORRECTION : Clé 'user' en anglais pour correspondre au AuthService de Flutter
         return response()->json([
             'message' => 'Inscription réussie',
-            'user' => $utilisateur,
+            'utilisateur' => $user,
             'token' => $token,
         ], 201);
     }
 
-    public function connecter(Request $request)
+    public function login(Request $request)
     {
         $request->validate([
             'telephone' => 'required|string',
-            'password' => 'required|string',
+            'password' => 'required|string|min:6',
         ]);
 
-        // Nettoyage du numéro saisi à la connexion
-        $telephone = str_replace(' ', '', $request->telephone);
+        $telephone = preg_replace('/\s+/', '', $request->telephone);
+        $user = User::where('telephone', $telephone)->first();
 
-        $utilisateur = User::where('telephone', $telephone)->first();
-
-        // Fonctionne maintenant parfaitement car le mot de passe en BDD est haché
-        if (!$utilisateur || !Hash::check($request->password, $utilisateur->password)) {
-            return response()->json(['message' => 'Téléphone ou mot de passe incorrect'], 401);
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json(['message' => 'Identifiants invalides'], 401);
         }
 
-        $token = $utilisateur->createToken('auth_token')->plainTextToken;
+        $token = $user->createToken('auth_token')->plainTextToken;
 
-        // CORRECTION : Clé 'user' uniforme avec l'inscription
         return response()->json([
-            'message' => 'Connexion réussie',
-            'user' => $utilisateur, 
+            'utilisateur' => $user,
             'token' => $token,
-        ]);
+        ], 200);
     }
 
-    public function profil(Request $request)
+    public function profile(Request $request)
+    {
+        $user = $request->user()->load(['commercant', 'livreur']);
+        return response()->json($user);
+    }
+
+    public function updateProfile(Request $request)
     {
         $user = $request->user();
-        $data = $user->toArray();
+        $data = $request->validate([
+            'nom' => 'sometimes|string|max:50',
+            'prenom' => 'sometimes|string|max:50',
+            'email' => 'sometimes|email|unique:users,email,' . $user->id,
+            'adresse' => 'sometimes|string',
+            'ville' => 'sometimes|string',
+            'quartier' => 'sometimes|string',
+        ]);
 
-        if ($user->role === 'commercant') {
-            $data['commercant'] = $user->commercant;
-        }
-
-        return response()->json($data);
+        $user->update($data);
+        return response()->json(['message' => 'Profil mis à jour', 'utilisateur' => $user]);
     }
 
-    public function updateProfil(Request $request)
-    {
-        $request->user()->update($request->only('adresse', 'ville', 'quartier'));
-        return response()->json(['message' => 'OK', 'user' => $request->user()]);
-    }
-
-    public function deconnecter(Request $request)
+    public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
         return response()->json(['message' => 'Déconnexion réussie']);
     }
 }
- 
